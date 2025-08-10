@@ -76,6 +76,17 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 $ErrorActionPreference = 'Stop'
 $VerbosePreference = 'Continue'
 
+# === Setup log file in script directory ===
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$logFile = Join-Path $scriptDir "rustdesk_install.log"
+
+function Write-Log {
+    param([string]$msg)
+    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    "$ts - $msg" | Out-File -Append -FilePath $logFile
+    Write-Verbose $msg
+}
+
 function Decrypt-String {
     param(
         [string]$EncryptedText,
@@ -98,17 +109,25 @@ function Decrypt-String {
     [Text.Encoding]::UTF8.GetString($decryptedBytes)
 }
 
+Write-Log "Starting RustDesk installation..."
+
 # Prompt for decryption password at install time
 $decryptPassword = Read-Host "Enter decryption password"
 
-# Decrypt the config secrets
-$relayServer = Decrypt-String("RELAY_ENCRYPTED") $decryptPassword
-$publicKey = Decrypt-String("KEY_ENCRYPTED") $decryptPassword
-$passwordPlain = Decrypt-String("PASS_ENCRYPTED") $decryptPassword
+try {
+    # Decrypt the config secrets
+    $relayServer = Decrypt-String("RELAY_ENCRYPTED") $decryptPassword
+    $publicKey = Decrypt-String("KEY_ENCRYPTED") $decryptPassword
+    $passwordPlain = Decrypt-String("PASS_ENCRYPTED") $decryptPassword
 
-Write-Output "Decrypted relay server: $relayServer"
-Write-Output "Decrypted public key: $publicKey"
-Write-Output "Decrypted password: $passwordPlain"
+    Write-Log "Decrypted relay server: $relayServer"
+    Write-Log "Decrypted public key: $publicKey"
+    Write-Log "Decrypted password: [HIDDEN]"
+} catch {
+    Write-Log "ERROR: Failed to decrypt configuration - $_"
+    Write-Error "Failed to decrypt configuration. Check password and try again."
+    exit 1
+}
 
 # -- Begin RustDesk install code --
 
@@ -136,24 +155,23 @@ key = '$publicKey'
 # Create Temp dir
 if (-not (Test-Path "C:\Temp")) {
     New-Item -Path "C:\Temp" -ItemType Directory -Force | Out-Null
+    Write-Log "Created Temp directory"
+} else {
+    Write-Log "Temp directory exists"
 }
 
-Write-Output "Temp directory ready."
-
-# Download installer
-Write-Output "Downloading RustDesk installer..."
+Write-Log "Downloading RustDesk installer..."
 Invoke-WebRequest -Uri $downloadUrl -OutFile $installerPath
-Write-Output "Download complete."
+Write-Log "Download complete."
 
-# Install silently
-Write-Output "Installing RustDesk silently..."
+Write-Log "Installing RustDesk silently..."
 $proc = Start-Process -FilePath $installerPath -ArgumentList "--silent-install" -PassThru
-if ($proc.WaitForExit(15000) -eq $false) {
-    Write-Output "Installer timed out, killing process."
+if (-not $proc.WaitForExit(15000)) {
+    Write-Log "Installer timed out, killing process."
     $proc.Kill()
     throw "RustDesk installer timed out."
 }
-Write-Output "Installation complete."
+Write-Log "Installation complete."
 
 Start-Sleep -Seconds 10
 
@@ -161,32 +179,33 @@ Start-Sleep -Seconds 10
 if (-not (Test-Path $installDir)) {
     $installDir = "C:\Program Files (x86)\RustDesk"
     if (-not (Test-Path $installDir)) {
+        Write-Log "RustDesk install directory not found."
         throw "RustDesk install directory not found."
     }
 }
+Write-Log "Using RustDesk install directory: $installDir"
 
 Set-Location $installDir
 
-# Install service
-Write-Output "Installing RustDesk service..."
+Write-Log "Installing RustDesk service..."
 $svcProc = Start-Process -FilePath ".\rustdesk.exe" -ArgumentList "--install-service" -NoNewWindow -PassThru
-if ($svcProc.WaitForExit(15000) -eq $false) {
-    Write-Output "Service install timed out, killing."
+if (-not $svcProc.WaitForExit(15000)) {
+    Write-Log "Service install timed out, killing."
     $svcProc.Kill()
     throw "RustDesk service install timed out."
 }
-Write-Output "Service installed."
+Write-Log "Service installed."
 
 Start-Sleep -Seconds 5
 
 # Stop service if running
 $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if ($service -and $service.Status -eq 'Running') {
-    Write-Output "Stopping RustDesk service to update config..."
+    Write-Log "Stopping RustDesk service to update config..."
     Stop-Service $service.Name -Force
     Start-Sleep -Seconds 5
 } else {
-    Write-Output "RustDesk service not running; killing rustdesk.exe processes..."
+    Write-Log "RustDesk service not running; killing rustdesk.exe processes..."
     Get-Process rustdesk -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep -Seconds 3
 }
@@ -196,39 +215,41 @@ foreach ($path in @($userConfigPath, $svcConfigPath)) {
     $dir = Split-Path $path
     if (-not (Test-Path $dir)) {
         New-Item -Path $dir -ItemType Directory -Force | Out-Null
+        Write-Log "Created config directory: $dir"
     }
     Set-Content -Path $path -Value $tomlContent -Encoding UTF8
-    Write-Output "Wrote config to $path"
+    Write-Log "Wrote config to $path"
 }
 
-# Start service
-Write-Output "Starting RustDesk service..."
+Write-Log "Starting RustDesk service..."
 Start-Service -Name $serviceName
 Start-Sleep -Seconds 10
 
-# Set password
-Write-Output "Setting RustDesk password..."
+Write-Log "Setting RustDesk password..."
 & .\rustdesk.exe --password $passwordPlain
-Write-Output "Password set."
+Write-Log "Password set."
 
-# Wait before getting ID
 Start-Sleep -Seconds 5
 
-# Get RustDesk ID
+Write-Log "Retrieving RustDesk ID..."
 $rustdesk_id_raw = cmd.exe /c ".\rustdesk.exe --get-id | more"
-if ([string]::IsNullOrEmpty($rustdesk_id_raw) -eq $false) {
+if (-not [string]::IsNullOrEmpty($rustdesk_id_raw)) {
     $rustdesk_id = $rustdesk_id_raw.Trim()
 } else {
     $rustdesk_id = ''
 }
 
-if ([string]::IsNullOrEmpty($rustdesk_id) -eq $true) {
-    Write-Output "Warning: RustDesk ID command returned empty."
+if ([string]::IsNullOrEmpty($rustdesk_id)) {
+    Write-Log "Warning: RustDesk ID command returned empty."
 } else {
-    Write-Output "RustDesk ID: $rustdesk_id"
+    Write-Log "RustDesk ID: $rustdesk_id"
 }
 
-Write-Output "Installation complete."
+Write-Log "Installation complete."
+
+# Open the log file for review
+Start-Process notepad.exe $logFile
+
 '@
 
 # Replace placeholders with encrypted strings
