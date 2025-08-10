@@ -68,6 +68,8 @@ Usage
 Run in PowerShell:\
 .\RustDesk_Config_Generator.ps1
 
+Or right click and select Open in Powershell.
+
 You will be prompted for:
 
 -   Relay server (IP or domain)
@@ -94,6 +96,8 @@ Share the encryption password securely (never include it in plain text in the sc
 
 Run in PowerShell:\
 .\RustDesk_Install_Encrypted.ps1
+
+or right click and select Open in Powershell.
 
 -   Click Yes when prompted by UAC.
 
