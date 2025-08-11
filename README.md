@@ -31,6 +31,8 @@ Usage
 
 2.  Provide the requested configuration values:
 
+    -   Version of RustDesk you want baked into the installation script   
+
     -   Relay server address
 
     -   Public key
@@ -39,17 +41,17 @@ Usage
 
     -   Optionally, choose to encrypt data and/or enable email notifications.
 
-3.  If encrypting, provide a password to secure the configuration data.
+4.  If encrypting, provide a password to secure the configuration data.
 
-4.  If enabling email notifications, provide SMTP and email account details.
+5.  If enabling email notifications, provide SMTP and email account details.
 
-5.  The script generates the installation files in the `ClientInstall` subfolder.
+6.  The script generates the installation files in the `ClientInstall` subfolder.
 
-6.  Distribute the `ClientInstall` folder contents to the target machines.
+7.  Distribute the `ClientInstall` folder contents to the target machines.
 
-7.  Run `RunMe.bat` on the target machine to launch the installer script.
+8.  Run `RunMe.bat` on the target machine to launch the installer script.
 
-8.  If you have chosen to encrypt the sensitive data ( key and password ), it will not show in your client script. Your client will need the password you set for encryption during generating the script.
+9.  If you have chosen to encrypt the sensitive data ( key and password ), it will not show in your client script. Your client will need the password you set for encryption during generating the script.
 
 Requirements
 ------------
