@@ -27,7 +27,7 @@ Features
 Usage
 -----
 
-1.  Run the generator script in PowerShell with administrator privileges.
+1.  Run the Runme.bat.
 
 2.  Provide the requested configuration values:
 
@@ -49,16 +49,16 @@ Usage
 
 7.  Run `RunMe.bat` on the target machine to launch the installer script.
 
+8.  If you have chosen to encrypt the sensitive data ( key and password ), it will not show in your client script. Your client will need the password you set for encryption during generating the script.
+
 Requirements
 ------------
 
--   Windows operating system with PowerShell 5.1 or higher.
+-   Windows operating system with PowerShell 5.1 or higher. ( I've tested this on Windows 10 and Windows 11 )
 
--   Administrator privileges to run the scripts.
+-   Administrator privileges to run the scripts. ( Will automatically request higher privledges if you don't run as Admin )
 
--   Internet connection on target machine to download RustDesk installer.
-
--   SMTP credentials if using email notifications.
+-   SMTP credentials if using email notifications. ( I've tested with office 365 )
 
 Notes
 -----
@@ -74,4 +74,4 @@ Notes
 License
 -------
 
-This project is provided as-is under the MIT License. Use at your own risk.
+This project is provided as-is under the MIT License.
