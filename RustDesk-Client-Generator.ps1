@@ -462,7 +462,7 @@ if ($useEmail) {
     $installerScript = $installerScript.Replace("CONFIG_TO_EMAIL", $configToEmail)
 }
 
-# ====== NEW: Create subdirectory ClientInstall and output files there ======
+
 
 $clientInstallDir = Join-Path -Path $PSScriptRoot -ChildPath "ClientInstall"
 
