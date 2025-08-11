@@ -1,36 +1,16 @@
-﻿# ================================
-# RustDesk Config Generator Script
-# by: jonpotz (Enhanced Version)
-# ================================
+﻿# =======================================================================
+# RustDesk Client Generator with Encrypted Credentials
+# =======================================================================
+# This PowerShell script generates a customized RustDesk installer script 
+# and a batch file to run it with appropriate execution policy settings. 
+# It supports optional #encryption of configuration data 
+#( public key / perm password ) and optional email notification
+#( also can be encrypted ) after installation.
+# =======================================================================
+# by: jonpotz
+# https://github.com/jonpotz/
+# =======================================================================
 
-# --- Check and handle PowerShell execution policy ---
-$currentPolicy = Get-ExecutionPolicy
-if ($currentPolicy -eq "Restricted" -or $currentPolicy -eq "AllSigned") {
-    Write-Host "Current PowerShell execution policy is: $currentPolicy" -ForegroundColor Yellow
-    Write-Host "This policy prevents the script from running properly." -ForegroundColor Yellow
-    Write-Host ""
-    $changePolicy = Read-Host "Would you like to set the execution policy to Unrestricted for this session? (y/n)"
-    
-    if ($changePolicy.ToLower() -eq "y" -or $changePolicy.ToLower() -eq "yes") {
-        try {
-            Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process -Force
-            Write-Host "Execution policy set to Unrestricted for this PowerShell session." -ForegroundColor Green
-            Write-Host ""
-        } catch {
-            Write-Host "Failed to set execution policy: $_" -ForegroundColor Red
-            Write-Host "Please run PowerShell as Administrator and manually set the policy with:" -ForegroundColor Yellow
-            Write-Host "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
-            Read-Host "Press Enter to exit"
-            exit
-        }
-    } else {
-        Write-Host "Script execution cancelled by user." -ForegroundColor Red
-        Write-Host "To run this script, you can manually set the execution policy with:" -ForegroundColor Yellow
-        Write-Host "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
-        Read-Host "Press Enter to exit"
-        exit
-    }
-}
 
 # --- Self-elevate to Administrator if needed ---
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -149,34 +129,6 @@ $installerScript = @'
 # RustDesk Installer Script
 # ===================================
 
-# --- Check and handle PowerShell execution policy ---
-$currentPolicy = Get-ExecutionPolicy
-if ($currentPolicy -eq "Restricted" -or $currentPolicy -eq "AllSigned") {
-    Write-Host "Current PowerShell execution policy is: $currentPolicy" -ForegroundColor Yellow
-    Write-Host "This policy prevents the script from running properly." -ForegroundColor Yellow
-    Write-Host ""
-    $changePolicy = Read-Host "Would you like to set the execution policy to Unrestricted for this session? (y/n)"
-    
-    if ($changePolicy.ToLower() -eq "y" -or $changePolicy.ToLower() -eq "yes") {
-        try {
-            Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process -Force
-            Write-Host "Execution policy set to Unrestricted for this PowerShell session." -ForegroundColor Green
-            Write-Host ""
-        } catch {
-            Write-Host "Failed to set execution policy: $_" -ForegroundColor Red
-            Write-Host "Please run PowerShell as Administrator and manually set the policy with:" -ForegroundColor Yellow
-            Write-Host "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
-            Read-Host "Press Enter to exit"
-            exit
-        }
-    } else {
-        Write-Host "Script execution cancelled by user." -ForegroundColor Red
-        Write-Host "To run this script, you can manually set the execution policy with:" -ForegroundColor Yellow
-        Write-Host "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
-        Read-Host "Press Enter to exit"
-        exit
-    }
-}
 
 # --- Self-elevate to Administrator if needed ---
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
