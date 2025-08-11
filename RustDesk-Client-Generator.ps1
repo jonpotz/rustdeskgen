@@ -48,6 +48,106 @@ function Encrypt-String {
     [Convert]::ToBase64String($encrypted)
 }
 
+function Get-RustDeskVersions {
+    Write-Host "Fetching latest RustDesk versions from GitHub..." -ForegroundColor Yellow
+    
+    try {
+        # Fetch releases from GitHub API
+        $apiUrl = "https://api.github.com/repos/rustdesk/rustdesk/releases"
+        $releases = Invoke-RestMethod -Uri $apiUrl -Method Get
+        
+        # Filter out pre-releases and nightly builds, get top 3 stable releases
+        $stableReleases = $releases | Where-Object { 
+            -not $_.prerelease -and 
+            $_.tag_name -notlike "*nightly*" -and
+            $_.tag_name -match "^\d+\.\d+\.\d+$"
+        } | Select-Object -First 3
+        
+        $versions = @{}
+        
+        for ($i = 0; $i -lt $stableReleases.Count; $i++) {
+            $release = $stableReleases[$i]
+            $version = $release.tag_name
+            
+            # Find the Windows x64 executable asset
+            $windowsAsset = $release.assets | Where-Object { 
+                $_.name -like "*x86_64.exe" -and 
+                $_.name -notlike "*sciter*" 
+            } | Select-Object -First 1
+            
+            if ($windowsAsset) {
+                $versions[($i + 1).ToString()] = @{
+                    "Version" = $version
+                    "URL" = $windowsAsset.browser_download_url
+                    "Published" = ([DateTime]$release.published_at).ToString("yyyy-MM-dd")
+                    "Name" = $release.name
+                }
+            }
+        }
+        
+        return $versions
+    }
+    catch {
+        Write-Warning "Failed to fetch versions from GitHub API: $_"
+        Write-Host "Falling back to hardcoded recent versions..." -ForegroundColor Yellow
+        
+        # Fallback to known recent versions
+        return @{
+            "1" = @{
+                "Version" = "1.4.1"
+                "URL" = "https://github.com/rustdesk/rustdesk/releases/download/1.4.1/rustdesk-1.4.1-x86_64.exe"
+                "Published" = "Recent"
+                "Name" = "RustDesk 1.4.1"
+            }
+            "2" = @{
+                "Version" = "1.4.0"
+                "URL" = "https://github.com/rustdesk/rustdesk/releases/download/1.4.0/rustdesk-1.4.0-x86_64.exe"
+                "Published" = "Recent"
+                "Name" = "RustDesk 1.4.0"
+            }
+            "3" = @{
+                "Version" = "1.3.9"
+                "URL" = "https://github.com/rustdesk/rustdesk/releases/download/1.3.9/rustdesk-1.3.9-x86_64.exe"
+                "Published" = "Recent"
+                "Name" = "RustDesk 1.3.9"
+            }
+        }
+    }
+}
+
+# Fetch available versions
+$versions = Get-RustDeskVersions
+
+if ($versions.Count -eq 0) {
+    Write-Error "No RustDesk versions could be retrieved. Please check your internet connection and try again."
+    exit 1
+}
+
+# Display version selection
+Write-Host ""
+Write-Host "=== RustDesk Version Selection ===" -ForegroundColor Green
+Write-Host "Please select which version of RustDeck to package into client install script:" -ForegroundColor Yellow
+Write-Host ""
+
+foreach ($key in $versions.Keys | Sort-Object) {
+    $version = $versions[$key]
+    $recommended = if ($key -eq "1") { " (Latest - Recommended)" } else { "" }
+    Write-Host "$key. Version $($version.Version)$recommended" -ForegroundColor Cyan
+    Write-Host "   Published: $($version.Published)" -ForegroundColor Gray
+    if ($version.Name -ne "RustDesk $($version.Version)") {
+        Write-Host "   Release: $($version.Name)" -ForegroundColor Gray
+    }
+    Write-Host ""
+}
+
+do {
+    $versionChoice = Read-Host "Enter your choice (1, 2, or 3)"
+} while ($versionChoice -notin $versions.Keys)
+
+$selectedVersion = $versions[$versionChoice]
+Write-Host "Selected: RustDesk $($selectedVersion.Version)" -ForegroundColor Green
+Write-Host ""
+
 # Prompt user for config values
 $relayServer = Read-Host "Enter the relay server ip or domain"
 $publicKey = Read-Host "Enter the public key"
@@ -127,6 +227,7 @@ if ($useEncryption) {
 $installerScript = @'
 # ===================================
 # RustDesk Installer Script
+# Version: SELECTED_VERSION
 # ===================================
 
 
@@ -191,7 +292,7 @@ function Decrypt-String {
 
 $installerScript += @'
 
-Write-Log "Starting RustDesk installation..."
+Write-Log "Starting RustDesk SELECTED_VERSION installation..."
 
 '@
 
@@ -280,12 +381,13 @@ function Send-EmailNotification {
         $mailMessage = New-Object Net.Mail.MailMessage
         $mailMessage.From = $fromEmail
         $mailMessage.To.Add($toEmail)
-        $mailMessage.Subject = "RustDesk Installation Complete - ID: $RustDeskId"
+        $mailMessage.Subject = "RustDesk SELECTED_VERSION Installation Complete - ID: $RustDeskId"
         
         $body = @"
 RustDesk installation has been completed successfully.
 
 RustDesk ID: $RustDeskId
+RustDesk Version: SELECTED_VERSION
 Relay Server: $relayServer
 Installation Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 Computer Name: $env:COMPUTERNAME
@@ -312,7 +414,7 @@ $installerScript += @'
 # -- Begin RustDesk install code --
 
 # Paths and variables
-$downloadUrl    = "https://github.com/rustdesk/rustdesk/releases/download/1.4.1/rustdesk-1.4.1-x86_64.exe"
+$downloadUrl    = "SELECTED_URL"
 $installerPath  = "C:\Temp\rustdesk.exe"
 $installDir     = "C:\Program Files\RustDesk"
 $serviceName    = "RustDesk"
@@ -340,7 +442,7 @@ if (-not (Test-Path "C:\Temp")) {
     Write-Log "Temp directory exists"
 }
 
-Write-Log "Downloading RustDesk installer..."
+Write-Log "Downloading RustDesk SELECTED_VERSION installer..."
 Invoke-WebRequest -Uri $downloadUrl -OutFile $installerPath
 Write-Log "Download complete."
 
@@ -450,6 +552,8 @@ Start-Process notepad.exe $logFile
 '@
 
 # Replace placeholders with actual values
+$installerScript = $installerScript.Replace("SELECTED_VERSION", $selectedVersion.Version)
+$installerScript = $installerScript.Replace("SELECTED_URL", $selectedVersion.URL)
 $installerScript = $installerScript.Replace("CONFIG_RELAY", $configRelay)
 $installerScript = $installerScript.Replace("CONFIG_KEY", $configKey)
 $installerScript = $installerScript.Replace("CONFIG_PASS", $configPass)
@@ -461,8 +565,6 @@ if ($useEmail) {
     $installerScript = $installerScript.Replace("CONFIG_FROM_PASSWORD", $configFromPassword)
     $installerScript = $installerScript.Replace("CONFIG_TO_EMAIL", $configToEmail)
 }
-
-
 
 $clientInstallDir = Join-Path -Path $PSScriptRoot -ChildPath "ClientInstall"
 
@@ -479,7 +581,7 @@ $batchFilePath = Join-Path -Path $clientInstallDir -ChildPath "RunMe.bat"
 
 # Save the installer PowerShell script
 $installerScript | Out-File -FilePath $installerFilePath -Encoding UTF8
-Write-Output "Installer script generated at: $installerFilePath"
+Write-Output "Installer script generated for RustDesk $($selectedVersion.Version) at: $installerFilePath"
 
 # Create the batch file content
 $batchContent = @"
@@ -503,4 +605,3 @@ if ($useEmail) {
 }
 
 Write-Output "`nDistribute the contents of the 'ClientInstall' folder to target machines for installation."
-
