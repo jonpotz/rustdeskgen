@@ -1,7 +1,7 @@
 RustDesk Client Generator with Encrypted Credentials
 ============================
 
-This PowerShell script generates a customized RustDesk installer script and a batch file to run it with appropriate execution policy settings. It supports optional encryption of configuration data and optional email notification after installation.
+This PowerShell script generates a customized RustDesk installer script and a batch file to run it with appropriate execution policy settings. It supports optional encryption of configuration data ( public key / perm password ) and optional email notification ( also can be encrypted ) after installation.
 
 Features
 --------
