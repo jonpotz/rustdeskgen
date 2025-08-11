@@ -1,7 +1,36 @@
 ﻿# ================================
 # RustDesk Config Generator Script
-# by: jonpotz
+# by: jonpotz (Enhanced Version)
 # ================================
+
+# --- Check and handle PowerShell execution policy ---
+$currentPolicy = Get-ExecutionPolicy
+if ($currentPolicy -eq "Restricted" -or $currentPolicy -eq "AllSigned") {
+    Write-Host "Current PowerShell execution policy is: $currentPolicy" -ForegroundColor Yellow
+    Write-Host "This policy prevents the script from running properly." -ForegroundColor Yellow
+    Write-Host ""
+    $changePolicy = Read-Host "Would you like to set the execution policy to Unrestricted for this session? (y/n)"
+    
+    if ($changePolicy.ToLower() -eq "y" -or $changePolicy.ToLower() -eq "yes") {
+        try {
+            Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process -Force
+            Write-Host "Execution policy set to Unrestricted for this PowerShell session." -ForegroundColor Green
+            Write-Host ""
+        } catch {
+            Write-Host "Failed to set execution policy: $_" -ForegroundColor Red
+            Write-Host "Please run PowerShell as Administrator and manually set the policy with:" -ForegroundColor Yellow
+            Write-Host "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
+            Read-Host "Press Enter to exit"
+            exit
+        }
+    } else {
+        Write-Host "Script execution cancelled by user." -ForegroundColor Red
+        Write-Host "To run this script, you can manually set the execution policy with:" -ForegroundColor Yellow
+        Write-Host "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
+        Read-Host "Press Enter to exit"
+        exit
+    }
+}
 
 # --- Self-elevate to Administrator if needed ---
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -40,24 +69,114 @@ function Encrypt-String {
 }
 
 # Prompt user for config values
-$relayServer = Read-Host "Enter the relay server ip or domain:"
-$publicKey   = Read-Host "Enter the public key:"
-$passwordPlain = Read-Host "Enter the password to login to the client:"
+$relayServer = Read-Host "Enter the relay server ip or domain"
+$publicKey = Read-Host "Enter the public key"
+$passwordPlain = Read-Host "Enter the password to login to the client"
 
-# Prompt for encryption password
-$encPassword = Read-Host "Enter a password that will be asked when installing the client ( used to decrypt the info in the client script )" -AsSecureString
-$encPasswordPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($encPassword))
+# Ask if user wants encryption
+do {
+    $encryptChoice = Read-Host "Do you want to encrypt the data in the generated script? (y/n)"
+    $encryptChoice = $encryptChoice.ToLower()
+} while ($encryptChoice -ne "y" -and $encryptChoice -ne "n" -and $encryptChoice -ne "yes" -and $encryptChoice -ne "no")
 
-# Encrypt secrets
-$encRelay = Encrypt-String $relayServer $encPasswordPlain
-$encKey = Encrypt-String $publicKey $encPasswordPlain
-$encPass = Encrypt-String $passwordPlain $encPasswordPlain
+$useEncryption = ($encryptChoice -eq "y" -or $encryptChoice -eq "yes")
 
-# The installer script with placeholders for encrypted secrets
+# Ask about email functionality
+do {
+    $emailChoice = Read-Host "Do you want to include email functionality to send log and ID after installation? (y/n)"
+    $emailChoice = $emailChoice.ToLower()
+} while ($emailChoice -ne "y" -and $emailChoice -ne "n" -and $emailChoice -ne "yes" -and $emailChoice -ne "no")
+
+$useEmail = ($emailChoice -eq "y" -or $emailChoice -eq "yes")
+
+# Initialize variables
+$encPasswordPlain = ""
+$smtpServer = ""
+$smtpPort = ""
+$fromEmail = ""
+$fromPassword = ""
+$toEmail = ""
+
+# Get encryption password if needed
+if ($useEncryption) {
+    $encPassword = Read-Host "Enter a password that will be asked when installing the client (used to decrypt the info in the client script)" -AsSecureString
+    $encPasswordPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($encPassword))
+}
+
+# Get email settings if needed
+if ($useEmail) {
+    Write-Host "`nEmail Configuration:"
+    $smtpServer = Read-Host "Enter SMTP server (e.g., smtp.gmail.com)"
+    $smtpPort = Read-Host "Enter SMTP port (e.g., 587 for TLS, 465 for SSL)"
+    $fromEmail = Read-Host "Enter sender email address"
+    $fromPassword = Read-Host "Enter sender email password (or app password)" -AsSecureString
+    $fromPasswordPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($fromPassword))
+    $toEmail = Read-Host "Enter recipient email address"
+}
+
+# Prepare configuration values
+if ($useEncryption) {
+    # Encrypt secrets
+    $configRelay = Encrypt-String $relayServer $encPasswordPlain
+    $configKey = Encrypt-String $publicKey $encPasswordPlain
+    $configPass = Encrypt-String $passwordPlain $encPasswordPlain
+    
+    if ($useEmail) {
+        $configSmtpServer = Encrypt-String $smtpServer $encPasswordPlain
+        $configSmtpPort = Encrypt-String $smtpPort $encPasswordPlain
+        $configFromEmail = Encrypt-String $fromEmail $encPasswordPlain
+        $configFromPassword = Encrypt-String $fromPasswordPlain $encPasswordPlain
+        $configToEmail = Encrypt-String $toEmail $encPasswordPlain
+    }
+} else {
+    # Use plain text
+    $configRelay = $relayServer
+    $configKey = $publicKey
+    $configPass = $passwordPlain
+    
+    if ($useEmail) {
+        $configSmtpServer = $smtpServer
+        $configSmtpPort = $smtpPort
+        $configFromEmail = $fromEmail
+        $configFromPassword = $fromPasswordPlain
+        $configToEmail = $toEmail
+    }
+}
+
+# Generate the installer script based on choices
 $installerScript = @'
 # ===================================
-# RustDesk Encrypted Installer Script
+# RustDesk Installer Script
 # ===================================
+
+# --- Check and handle PowerShell execution policy ---
+$currentPolicy = Get-ExecutionPolicy
+if ($currentPolicy -eq "Restricted" -or $currentPolicy -eq "AllSigned") {
+    Write-Host "Current PowerShell execution policy is: $currentPolicy" -ForegroundColor Yellow
+    Write-Host "This policy prevents the script from running properly." -ForegroundColor Yellow
+    Write-Host ""
+    $changePolicy = Read-Host "Would you like to set the execution policy to Unrestricted for this session? (y/n)"
+    
+    if ($changePolicy.ToLower() -eq "y" -or $changePolicy.ToLower() -eq "yes") {
+        try {
+            Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process -Force
+            Write-Host "Execution policy set to Unrestricted for this PowerShell session." -ForegroundColor Green
+            Write-Host ""
+        } catch {
+            Write-Host "Failed to set execution policy: $_" -ForegroundColor Red
+            Write-Host "Please run PowerShell as Administrator and manually set the policy with:" -ForegroundColor Yellow
+            Write-Host "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
+            Read-Host "Press Enter to exit"
+            exit
+        }
+    } else {
+        Write-Host "Script execution cancelled by user." -ForegroundColor Red
+        Write-Host "To run this script, you can manually set the execution policy with:" -ForegroundColor Yellow
+        Write-Host "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Yellow
+        Read-Host "Press Enter to exit"
+        exit
+    }
+}
 
 # --- Self-elevate to Administrator if needed ---
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -87,6 +206,12 @@ function Write-Log {
     Write-Verbose $msg
 }
 
+'@
+
+# Add decryption function if encryption is used
+if ($useEncryption) {
+    $installerScript += @'
+
 function Decrypt-String {
     param(
         [string]$EncryptedText,
@@ -109,25 +234,128 @@ function Decrypt-String {
     [Text.Encoding]::UTF8.GetString($decryptedBytes)
 }
 
+'@
+}
+
+$installerScript += @'
+
 Write-Log "Starting RustDesk installation..."
+
+'@
+
+# Add configuration section based on encryption choice
+if ($useEncryption) {
+    $installerScript += @'
 
 # Prompt for decryption password at install time
 $decryptPassword = Read-Host "Enter decryption password"
 
 try {
     # Decrypt the config secrets
-    $relayServer = Decrypt-String("RELAY_ENCRYPTED") $decryptPassword
-    $publicKey = Decrypt-String("KEY_ENCRYPTED") $decryptPassword
-    $passwordPlain = Decrypt-String("PASS_ENCRYPTED") $decryptPassword
+    $relayServer = Decrypt-String("CONFIG_RELAY") $decryptPassword
+    $publicKey = Decrypt-String("CONFIG_KEY") $decryptPassword
+    $passwordPlain = Decrypt-String("CONFIG_PASS") $decryptPassword
 
-    Write-Log "Decrypted relay server: $relayServer"
-    Write-Log "Decrypted public key: $publicKey"
-    Write-Log "Decrypted password: [HIDDEN]"
+'@
+    if ($useEmail) {
+        $installerScript += @'
+    # Decrypt email settings
+    $smtpServer = Decrypt-String("CONFIG_SMTP_SERVER") $decryptPassword
+    $smtpPort = Decrypt-String("CONFIG_SMTP_PORT") $decryptPassword
+    $fromEmail = Decrypt-String("CONFIG_FROM_EMAIL") $decryptPassword
+    $fromPassword = Decrypt-String("CONFIG_FROM_PASSWORD") $decryptPassword
+    $toEmail = Decrypt-String("CONFIG_TO_EMAIL") $decryptPassword
+
+'@
+    }
+    
+    $installerScript += @'
+    Write-Log "Configuration decrypted successfully"
+    Write-Log "Relay server: [HIDDEN]"
+    Write-Log "Public key: [HIDDEN]"
+    Write-Log "Password: [HIDDEN]"
 } catch {
     Write-Log "ERROR: Failed to decrypt configuration - $_"
     Write-Error "Failed to decrypt configuration. Check password and try again."
     exit 1
 }
+
+'@
+} else {
+    $installerScript += @'
+
+# Configuration values (plain text)
+$relayServer = "CONFIG_RELAY"
+$publicKey = "CONFIG_KEY"
+$passwordPlain = "CONFIG_PASS"
+
+'@
+    if ($useEmail) {
+        $installerScript += @'
+# Email configuration (plain text)
+$smtpServer = "CONFIG_SMTP_SERVER"
+$smtpPort = "CONFIG_SMTP_PORT"
+$fromEmail = "CONFIG_FROM_EMAIL"
+$fromPassword = "CONFIG_FROM_PASSWORD"
+$toEmail = "CONFIG_TO_EMAIL"
+
+'@
+    }
+    
+    $installerScript += @'
+Write-Log "Configuration loaded successfully"
+Write-Log "Relay server: [HIDDEN]"
+Write-Log "Public key: [HIDDEN]"
+Write-Log "Password: [HIDDEN]"
+
+'@
+}
+
+# Add email function if needed
+if ($useEmail) {
+    $installerScript += @'
+
+function Send-EmailNotification {
+    param(
+        [string]$RustDeskId,
+        [string]$LogContent
+    )
+    try {
+        $smtpClient = New-Object Net.Mail.SmtpClient($smtpServer, $smtpPort)
+        $smtpClient.EnableSsl = $true
+        $smtpClient.Credentials = New-Object Net.NetworkCredential($fromEmail, $fromPassword)
+        
+        $mailMessage = New-Object Net.Mail.MailMessage
+        $mailMessage.From = $fromEmail
+        $mailMessage.To.Add($toEmail)
+        $mailMessage.Subject = "RustDesk Installation Complete - ID: $RustDeskId"
+        
+        $body = @"
+RustDesk installation has been completed successfully.
+
+RustDesk ID: $RustDeskId
+Relay Server: $relayServer
+Installation Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Computer Name: $env:COMPUTERNAME
+Username: $env:USERNAME
+
+Installation Log:
+$LogContent
+"@
+        
+        $mailMessage.Body = $body
+        $smtpClient.Send($mailMessage)
+        Write-Log "Email notification sent successfully to $toEmail"
+    } catch {
+        Write-Log "Failed to send email notification: $_"
+    }
+}
+
+'@
+}
+
+# Continue with the main installation code
+$installerScript += @'
 
 # -- Begin RustDesk install code --
 
@@ -141,7 +369,7 @@ $serviceName    = "RustDesk"
 $userConfigPath = "C:\Users\$env:USERNAME\AppData\Roaming\RustDesk\config\RustDesk2.toml"
 $svcConfigPath  = "C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config\RustDesk2.toml"
 
-# Compose TOML config with decrypted secrets
+# Compose TOML config with secrets
 $tomlContent = @"
 rendezvous_server = '$relayServer`:21116'
 nat_type = 1
@@ -247,19 +475,80 @@ if ([string]::IsNullOrEmpty($rustdesk_id)) {
 
 Write-Log "Installation complete."
 
-# Open the log file for review
-Start-Process notepad.exe $logFile
-
 '@
 
-# Replace placeholders with encrypted strings
-$installerScript = $installerScript.Replace("RELAY_ENCRYPTED", $encRelay)
-$installerScript = $installerScript.Replace("KEY_ENCRYPTED", $encKey)
-$installerScript = $installerScript.Replace("PASS_ENCRYPTED", $encPass)
+# Add email sending if enabled
+if ($useEmail) {
+    $installerScript += @'
 
-# Output file in same directory as this generator script
-$outFile = Join-Path -Path $PSScriptRoot -ChildPath "RustDesk_Install_Encrypted.ps1"
-$installerScript | Out-File -FilePath $outFile -Encoding UTF8
+# Send email notification if configured
+if ($smtpServer -and $fromEmail -and $toEmail) {
+    Write-Log "Sending email notification..."
+    $logContent = Get-Content $logFile -Raw
+    Send-EmailNotification -RustDeskId $rustdesk_id -LogContent $logContent
+}
 
-Write-Output "Encrypted installer script generated at: $outFile"
-Write-Output "Distribute this script and provide the decryption password to run it."
+'@
+}
+
+$installerScript += @'
+
+# Open the log file for review
+Start-Process notepad.exe $logFile
+'@
+
+# Replace placeholders with actual values
+$installerScript = $installerScript.Replace("CONFIG_RELAY", $configRelay)
+$installerScript = $installerScript.Replace("CONFIG_KEY", $configKey)
+$installerScript = $installerScript.Replace("CONFIG_PASS", $configPass)
+
+if ($useEmail) {
+    $installerScript = $installerScript.Replace("CONFIG_SMTP_SERVER", $configSmtpServer)
+    $installerScript = $installerScript.Replace("CONFIG_SMTP_PORT", $configSmtpPort)
+    $installerScript = $installerScript.Replace("CONFIG_FROM_EMAIL", $configFromEmail)
+    $installerScript = $installerScript.Replace("CONFIG_FROM_PASSWORD", $configFromPassword)
+    $installerScript = $installerScript.Replace("CONFIG_TO_EMAIL", $configToEmail)
+}
+
+# ====== NEW: Create subdirectory ClientInstall and output files there ======
+
+$clientInstallDir = Join-Path -Path $PSScriptRoot -ChildPath "ClientInstall"
+
+if (-not (Test-Path $clientInstallDir)) {
+    New-Item -Path $clientInstallDir -ItemType Directory -Force | Out-Null
+    Write-Output "Created directory: $clientInstallDir"
+} else {
+    Write-Output "Directory already exists: $clientInstallDir"
+}
+
+# Define output paths for installer script and batch file
+$installerFilePath = Join-Path -Path $clientInstallDir -ChildPath "ClientInstall.ps1"
+$batchFilePath = Join-Path -Path $clientInstallDir -ChildPath "RunMe.bat"
+
+# Save the installer PowerShell script
+$installerScript | Out-File -FilePath $installerFilePath -Encoding UTF8
+Write-Output "Installer script generated at: $installerFilePath"
+
+# Create the batch file content
+$batchContent = @"
+@echo off
+powershell -noexit -ExecutionPolicy Bypass -File ClientInstall.ps1
+"@
+
+# Save the batch file
+$batchContent | Out-File -FilePath $batchFilePath -Encoding ASCII
+Write-Output "Batch file generated at: $batchFilePath"
+
+# Inform user about encryption and email settings
+if ($useEncryption) {
+    Write-Output "This script uses encryption. Provide the decryption password when running the installer."
+} else {
+    Write-Output "This script contains plain text configuration data."
+}
+
+if ($useEmail) {
+    Write-Output "Email notifications are enabled and will be sent to: $toEmail"
+}
+
+Write-Output "`nDistribute the contents of the 'ClientInstall' folder to target machines for installation."
+
