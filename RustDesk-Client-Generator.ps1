@@ -7,8 +7,8 @@
 #( public key / perm password ) and optional email notification
 #( also can be encrypted ) after installation.
 # =======================================================================
-# by: jonpotz
-# https://github.com/jonpotz/
+# by: bluebeamdev
+# https://github.com/bluebeamdev/
 # =======================================================================
 
 
@@ -605,3 +605,4 @@ if ($useEmail) {
 }
 
 Write-Output "`nDistribute the contents of the 'ClientInstall' folder to target machines for installation."
+
